@@ -14,7 +14,7 @@ To build and run this service, you will need to have Go and Docker installed.
 
 ### Clone the repository
 
-git clone https://github.com/yourusername/redirect-service.git
+git clone https://github.com/wallib-bitcoin/wallet-bc-redirect.git
 
 ### Build the service
 
@@ -23,7 +23,7 @@ go build
 
 ### Run the service
 
-REDIRECT_URL=https://example.com ./redirect-service
+REDIRECT_URL=https://wallib.com ./redirect-service
 
 ## Usage
 
@@ -37,9 +37,4 @@ To test the service, you can use `curl` to send a GET or POST request to the ser
 
     curl -X POST -d '{"invoice":"123456","status":"pending","wallet_id":"123"}' http://localhost:8080/path
 
-## Notes
-
-The service is intended for development and testing use 
-cases only. It should not be used in production environments 
-without proper security and performance considerations.
 
