@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -9,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"regexp"
-	"strconv"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -33,7 +33,6 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	redirectURL := os.Getenv("REDIRECT_URL")
-	maxRedirections, _ := strconv.Atoi(os.Getenv("MAX_REDIR"))
 
 	// if the redirectURL isn't set, return an error
 	if redirectURL == "" {
@@ -50,6 +49,17 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	log.Println(fmt.Sprintf("Headers from redirect: %v", request.Header))
+	// Validate the headers
+	for key := range request.Header {
+		key = http.CanonicalHeaderKey(key)
+		log.Println(fmt.Sprintf("Header from redirect: %v", key))
+		if err := validateInput(key); err != nil {
+			http.Error(writer, fmt.Sprintf("Invalid header key: %s", key), http.StatusBadRequest)
+			return
+		}
+	}
+
 	queryParams := request.URL.Query()
 	if queryParams != nil {
 		if err := validateQueryParameters(queryParams); err != nil {
@@ -59,35 +69,6 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 		redirectURL += "?" + queryParams.Encode()
 	}
 
-	// Validate the headers
-	for key := range request.Header {
-		key = http.CanonicalHeaderKey(key)
-		if err := validateInput(key); err != nil {
-			http.Error(writer, fmt.Sprintf("Invalid header key: %s", key), http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Parse the form values
-	if err := request.ParseForm(); err != nil {
-		http.Error(writer, fmt.Sprintf("Error parsing form values: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Validate the form values
-	for key, values := range request.Form {
-		if err := validateInput(key); err != nil {
-			http.Error(writer, fmt.Sprintf("Invalid form key: %s", key), http.StatusBadRequest)
-			return
-		}
-		for _, value := range values {
-			if err := validateInput(value); err != nil {
-				http.Error(writer, fmt.Sprintf("Invalid form value: %s", value), http.StatusBadRequest)
-				return
-			}
-		}
-	}
-
 	// set its timeout
 	client := &http.Client{
 		Timeout: time.Second * 60,
@@ -95,63 +76,64 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 
 	// make a request to the redirectURL based on the method of the original request
 	var resp *http.Response
-	var err error
-	var count = 0
 	switch request.Method {
 
 	case http.MethodGet:
-		req, err := http.NewRequest(http.MethodGet, redirectURL, request.Body)
-		if err != nil {
-			http.Error(writer, fmt.Sprintf("Error creating request: %v", err), http.StatusInternalServerError)
-			return
-		}
+		req, _ := http.NewRequest(http.MethodGet, redirectURL, nil)
 		log.Println(fmt.Sprintf("Request from redirect: %v", req))
 
-		ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
-		resp, err = client.Do(req)
-		cancel()
+		resp, _ = client.Do(req)
 
-		count, err = countRedirections(count, maxRedirections)
-		if err != nil {
-			http.Error(writer, fmt.Sprintf("Max %v", err), http.StatusBadRequest)
-			return
-		}
+		cancel()
 	case http.MethodPost:
-		req, err := http.NewRequest(http.MethodPost, redirectURL, request.Body)
+
+		buf := new(bytes.Buffer)
+		_, err := buf.ReadFrom(request.Body)
 		if err != nil {
-			http.Error(writer, fmt.Sprintf("Error creating request: %v", err), http.StatusInternalServerError)
+			http.Error(writer, fmt.Sprintf("Error reading request body: %v", err), http.StatusBadRequest)
 			return
 		}
 
+		if buf.Len() == 0 {
+			http.Error(writer, "Request body is empty", http.StatusBadRequest)
+			return
+		}
+
+		req, _ := http.NewRequest(http.MethodPost, redirectURL, buf)
 		log.Println(fmt.Sprintf("Request from redirect: %v", req))
 
-		ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
 		resp, err = client.Do(req)
 		cancel()
 
-		count, err = countRedirections(count, maxRedirections)
-		if err != nil {
-			http.Error(writer, fmt.Sprintf("Max %v", err), http.StatusBadRequest)
-			return
-		}
 	case http.MethodPut:
-		req, err := http.NewRequest(http.MethodPut, redirectURL, request.Body)
+
+		buf := new(bytes.Buffer)
+		_, err := buf.ReadFrom(request.Body)
 		if err != nil {
-			http.Error(writer, fmt.Sprintf("Error creating request: %v", err), http.StatusInternalServerError)
+			http.Error(writer, fmt.Sprintf("Error reading request body: %v", err), http.StatusBadRequest)
 			return
 		}
+
+		if buf.Len() == 0 {
+			http.Error(writer, "Request body is empty", http.StatusBadRequest)
+			return
+		}
+
+		req, _ := http.NewRequest(http.MethodPut, redirectURL, buf)
+		log.Println(fmt.Sprintf("Request from redirect: %v", req))
+
+		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
+		req = req.WithContext(ctx)
 		req.Header = request.Header
 		resp, err = client.Do(req)
-		log.Println(fmt.Sprintf("Request from redirect: %v", req))
-		count, err = countRedirections(count, maxRedirections)
-		if err != nil {
-			http.Error(writer, fmt.Sprintf("Max %v", err), http.StatusBadRequest)
-			return
-		}
+		cancel()
+
 	default:
 		http.Error(writer, "Invalid request method", http.StatusBadRequest)
 		return
@@ -159,10 +141,6 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 
 	log.Println(fmt.Sprintf("Response from remote: %v", resp))
 
-	if err != nil {
-		http.Error(writer, fmt.Sprintf("Error making request to %s: %v", redirectURL, err), http.StatusInternalServerError)
-		return
-	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
@@ -182,6 +160,7 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 	_, _ = io.Copy(writer, resp.Body)
 
 }
+
 func validateUrl(redirectUrl string) error {
 	u, err := url.ParseRequestURI(redirectUrl)
 	if err != nil {
@@ -196,11 +175,11 @@ func validateUrl(redirectUrl string) error {
 func validateQueryParameters(queryParams url.Values) error {
 	// Define a regular expression
 	pattern := `^[a-zA-Z0-9:_/?-]+$`
+	valid := regexp.MustCompile(pattern)
 
-	// Validate the query parameters
-	validKey := regexp.MustCompile(pattern)
+	// Validate the key parameters
 	for key := range queryParams {
-		if !validKey.MatchString(key) {
+		if !valid.MatchString(key) {
 			return fmt.Errorf("invalid query parameters: %v", key)
 		}
 	}
@@ -219,12 +198,4 @@ func validateInput(input string) error {
 	}
 
 	return nil
-}
-
-func countRedirections(redirectCount int, maxRedirections int) (int, error) {
-	if redirectCount > maxRedirections {
-		return 0, fmt.Errorf("redirect has reahed the maximun number of redirections permitted: %v", redirectCount)
-	}
-
-	return redirectCount + 1, nil
 }
