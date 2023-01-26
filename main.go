@@ -79,12 +79,16 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 	switch request.Method {
 
 	case http.MethodGet:
+
 		req, _ := http.NewRequest(http.MethodGet, redirectURL, nil)
 		log.Println(fmt.Sprintf("Request from redirect: %v", req))
 
 		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
+		header, _ := addHeader(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
+		req.Header.Set("x-api-key", header)
+
 		resp, _ = client.Do(req)
 
 		cancel()
@@ -108,9 +112,11 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
+		header, _ := addHeader(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
+		req.Header.Set("x-api-key", header)
+
 		resp, err = client.Do(req)
 		cancel()
-
 	case http.MethodPut:
 
 		buf := new(bytes.Buffer)
@@ -131,9 +137,11 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
+		header, _ := addHeader(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
+		req.Header.Set("x-api-key", header)
+
 		resp, err = client.Do(req)
 		cancel()
-
 	default:
 		http.Error(writer, "Invalid request method", http.StatusBadRequest)
 		return
@@ -198,4 +206,16 @@ func validateInput(input string) error {
 	}
 
 	return nil
+}
+
+func addHeader(apiKey string, xApiKey string) (string, error) {
+
+	apiKeyURL := os.Getenv("X_API_KEY")
+
+	if apiKey == "1" {
+		return apiKeyURL, nil
+	} else {
+		return xApiKey, nil
+	}
+
 }

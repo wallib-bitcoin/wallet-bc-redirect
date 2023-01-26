@@ -546,3 +546,47 @@ func TestRedirectBadHttpMethod(t *testing.T) {
 	}
 
 }
+
+func TestRedirectGetWithoutApiKey(t *testing.T) {
+
+	// Create a test server that returns a predefined response
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write([]byte("OK"))
+		if err != nil {
+			return
+		}
+	}))
+	defer ts.Close()
+
+	err := os.Setenv("REDIRECT_URL", ts.URL)
+	err = os.Setenv("X_API_KEY", "api-key")
+	if err != nil {
+		return
+	}
+	// Create a request to pass to our handler
+	req := httptest.NewRequest("GET", ts.URL+"/redirect?key=1&key=2&api-key=1", nil)
+	req.Header.Add("Content-Type", "application/json")
+
+	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
+	rr := httptest.NewRecorder()
+	rr.Header().Set("X-Api-Key", "api-key")
+	handler := http.HandlerFunc(redirect)
+
+	// Our handlers satisfy http.Handler, so we can call their ServeHTTP method
+	// directly and pass in our Request and ResponseRecorder.
+	handler.ServeHTTP(rr, req)
+
+	// Check the status code is what we expect.
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// check the header api-key
+	requestApiKey := req.Header.Get("X-Api-Key")
+	responseApiKey := rr.Header().Get("X-Api-Key")
+	if requestApiKey != responseApiKey {
+		t.Errorf("handler returned unexpected header: got %v want %v", requestApiKey, responseApiKey)
+	}
+
+}
