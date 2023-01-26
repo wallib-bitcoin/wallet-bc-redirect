@@ -3,14 +3,98 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: {{ .Values.certificate-name }}
-  namespace: develop
+  name: ${CERTIFICATE_NAME}
+  namespace: ${NAMESPACE}
 spec:
-  secretName: { { .Values.secret-certificate-name } }
+  secretName: ${SECRET_CERTIFICATE_NAME}
   issuerRef:
     kind: Issuer
     name: letsencrypt-prod
-  commonName: {{ .Values.certificate-domain }}
+  commonName: ${APP_NAME}.${BC_DOMAIN}
   dnsNames:
-    - {{ .Values.certificate-domain }}
+    - ${APP_NAME}.${BC_DOMAIN}
+---
+# Source: wallet-bc-redirect/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${SERVICE_NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app: ${APP_NAME}
+spec:
+  type: ClusterIP
+  ports:
+    - port: ${SERVICE_PORT}
+      targetPort: ${SERVICE_TARGET_PORT}
+      protocol: TCP
+      name: http
+  selector:
+    app: ${APP_NAME}
+---
+# Source: wallet-bc-redirect/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAMESPACE}
+  labels:
+    app: ${APP_NAME}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${APP_NAME}
+  template:
+    metadata:
+      labels:
+        app: ${APP_NAME}
+    spec:
+      containers:
+        - name: ${APP_NAME}
+          image: registry.${BC_DOMAIN}/${APP_NAME}:${MICROSERVICE_VERSION}
+          ports:
+            - containerPort: ${SERVICE_TARGET_PORT}
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: microservice-tmp
+              mountPath: /tmp
+              subPath: bc/${APP_NAME}
+      imagePullSecrets:
+        - name: registry-secret
+      volumes:
+        - name: miniservice-tmp
+          persistentVolumeClaim:
+            claimName: nfs-${NAMESPACE}-pvc
+---
+# Source: wallet-bc-redirect/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${APP_NAME}
+  namespace: ${NAMESPACE}
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/issuer: letsencrypt-prod
+spec:
+  defaultBackend:
+    service:
+      name: custom-default-backend
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - ${APP_NAME}.${BC_DOMAIN}
+      secretName: ${SECRET_CERTIFICATE_NAME}
+  rules:
+    - host: ${APP_NAME}.${BC_DOMAIN}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ${APP_NAME}
+                port:
+                  number: ${SERVICE_TARGET_PORT}
 ---
