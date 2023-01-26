@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"fmt"
 	"io"
 	"log"
@@ -86,7 +87,7 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
-		header, _ := addHeader(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
+		header := validateApiKey(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
 		req.Header.Set("x-api-key", header)
 
 		resp, _ = client.Do(req)
@@ -112,7 +113,8 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
-		header, _ := addHeader(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
+		header := validateApiKey(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
+		log.Println(fmt.Printf("Header: %v\n", request.URL.Query().Get("api-key")))
 		req.Header.Set("x-api-key", header)
 
 		resp, err = client.Do(req)
@@ -137,7 +139,7 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 60*time.Second)
 		req = req.WithContext(ctx)
 		req.Header = request.Header
-		header, _ := addHeader(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
+		header := validateApiKey(request.URL.Query().Get("api-key"), request.Header.Get("x-api-key"))
 		req.Header.Set("x-api-key", header)
 
 		resp, err = client.Do(req)
@@ -208,14 +210,22 @@ func validateInput(input string) error {
 	return nil
 }
 
-func addHeader(apiKey string, xApiKey string) (string, error) {
+func validateApiKey(apiKey string, xApiKey string) string {
 
 	apiKeyURL := os.Getenv("X_API_KEY")
 
-	if apiKey == "1" {
-		return apiKeyURL, nil
+	if apiKey != "" {
+		token := os.Getenv("TOKEN")
+		data := []byte(token)
+		sum := md5.Sum(data)
+
+		if fmt.Sprintf("%x", sum) == apiKey {
+			return apiKeyURL
+		}
+		return ""
+
 	} else {
-		return xApiKey, nil
+		return xApiKey
 	}
 
 }
