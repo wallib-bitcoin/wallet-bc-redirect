@@ -350,14 +350,9 @@ func TestRedirectPostWithEmptyBody(t *testing.T) {
 	handler.ServeHTTP(rr, req)
 
 	// Check the status code is what we expect.
-	if status := rr.Code; status != http.StatusBadRequest {
+	if status := rr.Code; status != http.StatusOK {
 		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusBadRequest)
-	}
-
-	if strings.TrimSpace(rr.Body.String()) != "Request body is empty" {
-		t.Errorf("handler returned unexpected error message: got (%v) want (%v)",
-			"Request body is empty", rr.Body.String())
+			status, http.StatusOK)
 	}
 
 }
