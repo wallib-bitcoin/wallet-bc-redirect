@@ -102,6 +102,11 @@ func redirect(writer http.ResponseWriter, request *http.Request) {
 			return
 		}
 
+		if buf.Len() == 0 {
+			http.Error(writer, "Request body is empty", http.StatusBadRequest)
+			return
+		}
+
 		req, _ := http.NewRequest(http.MethodPost, redirectURL, buf)
 		log.Println(fmt.Sprintf("Request from redirect: %v", req))
 
