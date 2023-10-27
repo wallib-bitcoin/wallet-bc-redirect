@@ -219,7 +219,11 @@ func validateApiKey(apiKey string, xApiKey string) string {
 		data := []byte(token)
 		sum := md5.Sum(data)
 
-		if fmt.Sprintf("%x", sum) == apiKey {
+		log.Println(fmt.Sprintf("Token: %v", token))
+		log.Println(fmt.Sprintf("Sum: %v", fmt.Sprintf("%x", sum)))
+		log.Println(fmt.Sprintf("ApiKey: %v", apiKey))
+
+		if token == apiKey {
 			return apiKeyURL
 		}
 		return ""
